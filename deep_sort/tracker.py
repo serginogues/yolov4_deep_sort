@@ -5,16 +5,19 @@ from . import kalman_filter
 from . import linear_assignment
 from . import iou_matching
 from .track import Track
+from .nn_matching import NearestNeighborDistanceMetric
+from .generate_detections import create_box_encoder
+from .detection import Detection
+from .preprocessing import non_max_suppression
 
 
 class Tracker:
     """
-    This is the multi-target tracker.
+    This is the multi-target tracker, which takes care of creation, keeping track, and eventual deletion of all tracks
+    matching threshold = max cosine distance.
 
     Parameters
     ----------
-    metric : nn_matching.NearestNeighborDistanceMetric
-        A distance metric for measurement-to-track association.
     max_age : int
         Maximum number of missed misses before a track is deleted.
     n_init : int
@@ -25,11 +28,9 @@ class Tracker:
     Attributes
     ----------
     metric : nn_matching.NearestNeighborDistanceMetric
-        The distance metric used for measurement to track association.
-    max_age : int
-        Maximum number of missed misses before a track is deleted.
-    n_init : int
-        Number of frames that a track remains in initialization phase.
+        A distance metric for measurement-to-track association.
+    encoder : generate_detections.ImageEncoder
+        The encoder is a CNN pre-trained deep_SORT tracking model
     kf : kalman_filter.KalmanFilter
         A Kalman filter to filter target trajectories in image space.
     tracks : List[Track]
@@ -37,23 +38,52 @@ class Tracker:
 
     """
 
-    def __init__(self, metric, max_iou_distance=0.7, max_age=30, n_init=3):
-        self.metric = metric
+    def __init__(self, max_iou_distance: float = 0.7, max_age: int = 30, n_init: int = 3):
         self.max_iou_distance = max_iou_distance
         self.max_age = max_age
         self.n_init = n_init
+
+        self.metric = NearestNeighborDistanceMetric("cosine", matching_threshold=0.7)
+        self.encoder = create_box_encoder('./deep_sort/mars-small128.pb', batch_size=1)
 
         self.kf = kalman_filter.KalmanFilter()
         self.tracks = []
         self._next_id = 1
 
-    def predict(self):
+    def predict(self, frame: np.ndarray, bboxes: np.ndarray, run_nms: bool = True):
         """Propagate track state distributions one time step forward.
-
         This function should be called once every time step, before `update`.
+
+        Parameters
+        ----------
+        frame: current frame where @bboxes have been detected
+        bboxes: array of shape (# objects, 5) where 5 = (x_min, y_min, x_max, y_max, score)
+            and coordinates are global (considering the width and height of the frame)
+        run_nms: if True, runs non-maxima suppression to input bboxes
         """
+        boxes = bboxes[:, :4]
+        scores = bboxes[:, 4:]
+
+        # encode yolo detections and feed to tracker
+        features = self.encoder(frame, boxes)
+
+        # Detection input tlwh, confidence, feature
+        detections = [Detection(bbox, score, feature) for bbox, score, feature in
+                      zip(boxes, scores, features)]
+
+        if run_nms:
+            # Run non-maxima suppression.
+            nms_max_overlap = 0.7
+            boxes = np.array([d.tlwh for d in detections])
+            scores = np.array([d.confidence for d in detections])
+            indices = non_max_suppression(boxes, nms_max_overlap, scores)
+            detections = [detections[i] for i in indices]
+
         for track in self.tracks:
             track.predict(self.kf)
+
+        # update
+        self.update(detections)
 
     def update(self, detections):
         """Perform measurement update and track management.

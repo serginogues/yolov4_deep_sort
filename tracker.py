@@ -3,21 +3,14 @@ In cmd shell:
 >> python tracker.py
 """
 # from PIL import Image
+import cv2
 import argparse
 import time
-import numpy as np
-from self_utils import *
-
-# yolov5 imports
 import torch
-from matplotlib import pyplot as plt
-
-# deep sort imports
-# import utils
-from deep_sort import preprocessing, nn_matching
-from deep_sort.detection import Detection
+import numpy as np
+import matplotlib.pyplot as plt
+from self_utils import xyxy_to_xywh, center_from_bbox
 from deep_sort.tracker import Tracker
-from deep_sort import generate_detections as gdet
 
 
 def run_video(config):
@@ -30,8 +23,6 @@ def run_video(config):
     """
     SAVE = config.save
     VIDEO_PATH = config.input
-    YOLO_CONF = 0.5  # YOLO minimum confidence threshold
-    DEEPSORT_WEIGHTS = "backup/mars-small128.pb"  # path to deep sort pre-trained cnn
 
     # init yolo
     yolo_model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
@@ -40,16 +31,10 @@ def run_video(config):
     print("YOLO device: ", device)
     yolo_model.classes = 0
     yolo_model.multi_label = False
-    yolo_model.conf = YOLO_CONF
+    yolo_model.conf = 0.5
 
     # init deep sort
-    # the encoder is a CNN pre-trained deep_SORT tracking model
-    encoder = gdet.create_box_encoder(DEEPSORT_WEIGHTS, batch_size=1)
-
-    # the Tracker takes care of creation, keeping track, and eventual deletion of all tracks
-    # matching threshold = max cosine distance
-    metric = nn_matching.NearestNeighborDistanceMetric("cosine", matching_threshold=0.7)
-    tracker = Tracker(metric)
+    tracker = Tracker()
 
     # begin video capture
     # if the input is the camera, pass 0 instead of the video path
@@ -108,33 +93,16 @@ def run_video(config):
 
         results = yolo_model(frame)
         # crops = results.crop(save=False)
-        bboxes = results.xyxy[0]
+        bboxes = results.xyxy[0]  # values are global coordinates within frame (without normalization)
 
         # yolo to deep sort
-        boxes, scores = xyxy_to_xywh(bboxes.cpu())
+        # Deep Sort Detection requires boxes input in the following format (x_min, y_min, width, height),
+        # but our YOLO outputs detections as (x_min, y_min, x_max, y_max)
+        boxes = xyxy_to_xywh(bboxes.cpu())
 
         # DEEP SORT
-        """
-        Deep Sort Detection requires boxes input in the following format (x_min, y_min, width, height), 
-        but our YOLO outputs detections as (x_min, y_min, x_max, y_max)
-        """
-        # encode yolo detections and feed to tracker
-        features = encoder(frame, boxes)
-
-        # Detection input tlwh, confidence, feature
-        detections = [Detection(bbox, score, feature) for bbox, score, feature in
-                      zip(boxes, scores, features)]
-
-        # Run non-maxima suppression.
-        nms_max_overlap = 0.7
-        boxes = np.array([d.tlwh for d in detections])
-        scores = np.array([d.confidence for d in detections])
-        indices = preprocessing.non_max_suppression(boxes, nms_max_overlap, scores)
-        detections = [detections[i] for i in indices]
-
         # Call the tracker and update tracks
-        tracker.predict()
-        tracker.update(detections)
+        tracker.predict(frame, boxes)
 
         # Slowfast
         # run it every 29 frames

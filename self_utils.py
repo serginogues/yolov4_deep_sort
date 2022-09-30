@@ -1,5 +1,6 @@
 import os
 import cv2
+import numpy as np
 
 
 def path_to_video_frames_list(path: str = 'test_videos/video-dancing.mp4', SAVE: bool = False):
@@ -47,13 +48,12 @@ def xyxy_to_xywh(bboxes):
     where the second dim is [xmin, ymin, xmax, ymax, confidence, class]
     :return: boxes = [# detections, 4] array where second dim is [xmin, ymin, width, height]
     """
-    boxes, scores, = [], []
+    boxes = []
     for bbox in bboxes:
         if bbox[5] == 0:
-            boxes.append([bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]])
-            scores.append(bbox[4])
+            boxes.append([bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1], bbox[4]])
 
-    return boxes, scores
+    return np.array(boxes)
 
 
 def get_labels_from_txt(path) -> list:
