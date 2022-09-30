@@ -1,6 +1,8 @@
 # vim: expandtab:ts=4:sw=4
 from __future__ import absolute_import
 import numpy as np
+import cv2
+import matplotlib.pyplot as plt
 from . import kalman_filter
 from . import linear_assignment
 from . import iou_matching
@@ -50,19 +52,23 @@ class Tracker:
         self.tracks = []
         self._next_id = 1
 
+        # display
+        cmap = plt.get_cmap('tab20b')
+        self.colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
+
     def predict(self, frame: np.ndarray, bboxes: np.ndarray, run_nms: bool = True):
-        """Propagate track state distributions one time step forward.
-        This function should be called once every time step, before `update`.
+        """Propagate track state distributions one time step forward and update tracks.
 
         Parameters
         ----------
         frame: current frame where @bboxes have been detected
-        bboxes: array of shape (# objects, 5) where 5 = (x_min, y_min, x_max, y_max, score)
+        bboxes: array of shape (# objects, 6) where 6 = (x_min, y_min, x_max, y_max, score, class)
             and coordinates are global (considering the width and height of the frame)
         run_nms: if True, runs non-maxima suppression to input bboxes
         """
         boxes = bboxes[:, :4]
-        scores = bboxes[:, 4:]
+        scores = bboxes[:, 4]
+        # classes = bboxes[:, 5]
 
         # encode yolo detections and feed to tracker
         features = self.encoder(frame, boxes)
@@ -120,8 +126,38 @@ class Tracker:
         self.metric.partial_fit(
             np.asarray(features), np.asarray(targets), active_targets)
 
-    def _match(self, detections):
+    def display(self, frame, verbose: bool = False):
+        """
+        Parameters
+        ----------
+        frame: current frame
+        verbose: if True prints current tracks
+        """
+        for track in self.tracks:
+            if not track.is_confirmed() or track.time_since_update > 1:
+                continue
+            bbox = track.to_tlbr()
 
+            # select color
+            color = self.colors[int(track.track_id) % len(self.colors)]
+            color = [i * 255 for i in color]
+
+            # bbox
+            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
+            # info bbox
+            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1] - 30)),
+                          (int(bbox[0]) + (len(str(track.track_id))) * 17, int(bbox[1])), color, -1)
+            # text
+            cv2.putText(frame, str(track.track_id), (int(bbox[0]), int(bbox[1] - 10)), 0, 0.75,
+                        (255, 255, 255), 2)
+
+            if verbose:
+                print("Tracker ID: {}, BBox Coords (xmin, ymin, xmax, ymax): {}".format(
+                str(track.track_id), (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
+
+        return frame
+
+    def _match(self, detections):
         def gated_metric(tracks, dets, track_indices, detection_indices):
             features = np.array([dets[i].feature for i in detection_indices])
             targets = np.array([tracks[i].track_id for i in track_indices])

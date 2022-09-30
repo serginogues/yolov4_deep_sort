@@ -5,42 +5,23 @@ In cmd shell:
 import cv2
 import argparse
 import time
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-from self_utils import xyxy_to_xywh, center_from_bbox
 from deep_sort.tracker import Tracker
+from yolov5utils import Detector
 
 
 def run_video(config):
     """
     MAINSCRIPT
-    :param USE_CUDA: if True, sets yolo to 'cuda' if available, else 'cpu'
-    :param TRACK_ONLY: classes id to track, other bboxes will be ignored
-    :param SAVE: if TRUE, saves video in mp4 format, else shows live video
-    :param VIDEO_PATH: path to input video
     """
     SAVE = config.save
     VIDEO_PATH = config.input
 
-    # init yolo
-    yolo_model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    yolo_model.to(device)
-    print("YOLO device: ", device)
-    yolo_model.classes = 0
-    yolo_model.multi_label = False
-    yolo_model.conf = 0.5
-
-    # init deep sort
+    # init
+    yolo_model = Detector()
     tracker = Tracker()
 
     # begin video capture
-    # if the input is the camera, pass 0 instead of the video path
-    try:
-        vid = cv2.VideoCapture(VIDEO_PATH)
-    except:
-        vid = cv2.VideoCapture(VIDEO_PATH)
+    vid = cv2.VideoCapture(VIDEO_PATH)
 
     # get video ready to save locally if flag is set
     out = None
@@ -55,12 +36,6 @@ def run_video(config):
     # init display params
     start = time.time()
     counter = 0
-
-    # initialize color map
-    cmap = plt.get_cmap('tab20b')
-    colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
-
-    # init video_clip for slowfast
     video_clip = []
 
     # read frame by frame until video is completed
@@ -78,59 +53,13 @@ def run_video(config):
         counter += 1
         print("Frame #", counter)
 
-        # YOLO
-        """
-        - results.pandas().xyxy[0]  # to obtain pd dict from single predicted image
-        - results.xyxy[0] = results.pred[0]  # bboxes 
-        - results.pandas().xywh[0]
-        - results.xywh[0]
-        - Crops:
-                - crops[i]['im']  # cropped image
-                - crops[i]['box']  # box coordinates
-                - crops[i]['conf'].item()  # prediction confidence   where @i is [0, n crops)
-        """
+        # YOLO + Deep SORT
+        bboxes = yolo_model.forward(frame)
+        tracker.predict(frame, bboxes)
 
-        results = yolo_model(frame)
-        # crops = results.crop(save=False)
-        bboxes = results.xyxy[0]  # values are global coordinates within frame (without normalization)
+        # display tracks
+        frame = tracker.display(frame)
 
-        # yolo to deep sort
-        # Deep Sort Detection requires boxes input in the following format (x_min, y_min, width, height),
-        # but our YOLO outputs detections as (x_min, y_min, x_max, y_max)
-        boxes = xyxy_to_xywh(bboxes.cpu())
-
-        # Call the tracker and update tracks
-        tracker.predict(frame, boxes)
-
-        # Slowfast
-        # run it every 29 frames
-        if len(video_clip) % 32 == 0:
-            pass
-
-        # Display
-        for track in tracker.tracks:
-            if not track.is_confirmed() or track.time_since_update > 1:
-                continue
-            bbox = track.to_tlbr()
-
-            # draw person bbox on screen
-            color = colors[int(track.track_id) % len(colors)]
-            color = [i * 255 for i in color]
-            # bbox
-            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
-            # info bbox
-            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1] - 30)),
-                          (int(bbox[0]) + (len(str(track.track_id))) * 17, int(bbox[1])), color, -1)
-            # text
-            cv2.putText(frame, str(track.track_id), (int(bbox[0]), int(bbox[1] - 10)), 0, 0.75,
-                        (255, 255, 255), 2)
-            # centroid
-            cv2.circle(frame, center_from_bbox(bbox), 4, color, 2)
-            # print details about each track
-            print("Tracker ID: {}, BBox Coords (xmin, ymin, xmax, ymax): {}".format(
-            str(track.track_id), (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
-
-        # Display
         # checking video frame rate
         fps = 1.0 / (time.time() - start_time)
         print("FPS: %.2f" % fps)

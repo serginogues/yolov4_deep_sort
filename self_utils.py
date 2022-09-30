@@ -41,21 +41,6 @@ def read_classes(path: str) -> list:
     return names
 
 
-def xyxy_to_xywh(bboxes):
-    """
-    Convert from
-    :param bboxes: YOLO output. 2D array of size [# detections, 6],
-    where the second dim is [xmin, ymin, xmax, ymax, confidence, class]
-    :return: boxes = [# detections, 4] array where second dim is [xmin, ymin, width, height]
-    """
-    boxes = []
-    for bbox in bboxes:
-        if bbox[5] == 0:
-            boxes.append([bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1], bbox[4]])
-
-    return np.array(boxes)
-
-
 def get_labels_from_txt(path) -> list:
     """
     :param path: path to labels repository
