@@ -1,5 +1,4 @@
 # yolov4_deep_sort
-### Author: Sergi Nogués
 Real-time multi-person tracker.
 
 ### Dependencies
