@@ -2,7 +2,6 @@
 In cmd shell:
 >> python run_video.py
 """
-# from PIL import Image
 import cv2
 import argparse
 import time
@@ -100,7 +99,6 @@ def run_video(config):
         # but our YOLO outputs detections as (x_min, y_min, x_max, y_max)
         boxes = xyxy_to_xywh(bboxes.cpu())
 
-        # DEEP SORT
         # Call the tracker and update tracks
         tracker.predict(frame, boxes)
 
