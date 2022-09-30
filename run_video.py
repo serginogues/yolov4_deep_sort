@@ -1,6 +1,6 @@
 """
 In cmd shell:
->> python tracker.py
+>> python run_video.py
 """
 # from PIL import Image
 import cv2
