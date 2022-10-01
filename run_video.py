@@ -36,7 +36,6 @@ def run_video(config):
     # init display params
     start = time.time()
     counter = 0
-    video_clip = []
 
     # read frame by frame until video is completed
     while vid.isOpened():
@@ -44,7 +43,6 @@ def run_video(config):
         ret, frame = vid.read()  # capture frame-by-frame
         if ret:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            video_clip.append(frame)
         else:
             print('Video has ended or failed')
             break
@@ -55,7 +53,9 @@ def run_video(config):
 
         # YOLO + Deep SORT
         bboxes = yolo_model.forward(frame)
-        tracker.predict(frame, bboxes)
+
+        if bboxes.size > 0:
+            tracker.predict(frame, bboxes)
 
         # display tracks
         frame = tracker.display(frame)
