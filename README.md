@@ -5,7 +5,7 @@ Real-time multi-person tracker.
 ``pip install -r requirements.txt``
 
 ### Run inference
-``python tracker.py`` \
+``python run_video.py`` \
 ``--input path/to/your/video.mp4 ``
 
 
