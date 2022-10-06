@@ -6,18 +6,17 @@ import cv2
 import argparse
 from pathlib import Path
 import numpy as np
-from tqdm import tqdm
 from deep_sort.tracker import Tracker
-from yolov5utils import Detector
+from yolo.yolov5utils import Detector
+import anomaly_detection.preprocess as pre
 
 
 def main(config):
-    video_list = get_video_paths(config.input)
-    image_size = config.img_size
+    video_list = pre.get_video_paths(config.input)
     yolo_model = Detector()
     vid_count = 0
-    for filename in tqdm(video_list, desc='Generating clips from ' + video_list[vid_count]):
-        process_video(filename, yolo_model, image_size)
+    for filename in video_list:
+        process_video(filename, yolo_model)
         vid_count += 1
 
 
@@ -60,32 +59,23 @@ def process_video(filename: str, yolo_model, image_size: int):
                     else:
                         clip_list[_id] = [crop_frame]
 
+        print(filename + ', frame: ' + str(frame_count))
         frame_count += 1
 
     cv2.destroyAllWindows()
     vid.release()
 
+    # save clips as .npy
+    repo = os.path.splitext(filename)[0]
+    create_empty_repo(repo)
+
     for obj in clip_list.keys():
-        # save clips as .npy
-        l = np.array(clip_list[obj], dtype=object)
+        l = clip_list[obj]
         if len(l) > 29:
+            l = np.array(clip_list[obj], dtype=object)
             if len(l) > 125:
                 l = l[15:115]
             np.save(os.path.join(repo, 'clip_' + obj), l)
-
-
-def show_clips(dir):
-    for f in os.listdir(dir):
-        p = os.path.join(dir, f)
-        if p.endswith('npy'):
-            arr = np.load(p)
-            show_clip(arr)
-
-
-def show_clip(clip):
-    for im in clip:
-        cv2.imshow('', im)
-        cv2.waitKey(0)
 
 
 def crop(img, bbox):
@@ -101,22 +91,11 @@ def create_empty_repo(file_path: str):
         print('Failed to delete %s. Reason: %s' % (file_path, e))
 
 
-def get_video_paths(parent_path: str, _ext: list[str] = ['mp4', 'avi']) -> list[str]:
-    l = []
-    for root, dirs, files in os.walk(parent_path):
-        for file in files:
-            filename, extension = os.path.splitext(file)
-            if any(word in extension.lower() for word in _ext):
-                full_path = os.path.join(root, file)
-                l.append(full_path)
-    return l
-
-
 if __name__ == '__main__':
+    # pre.show_clips(r'clips')
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input', type=str, default=r'vids',
+    parser.add_argument('--input', type=str,
+                        default=r'normal_clips',
                         help='path to input repo with videos to process')
-    parser.add_argument('--img_size', type=int, default=160,
-                        help='resize')
     config = parser.parse_args()
     main(config)

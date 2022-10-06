@@ -6,7 +6,7 @@ import cv2
 import argparse
 import time
 from deep_sort.tracker import Tracker
-from yolov5utils import Detector
+from yolo.yolov5utils import Detector
 
 
 def run_video(config):

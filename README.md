@@ -1,16 +1,36 @@
-# yolov4_deep_sort
-Real-time multi-person tracker.
+# YOLO + Deep SORT
+YOLO + Deep SORT (detection + tracking) pipeline.
 
-### Dependencies
-``pip install -r requirements.txt``
+### `run_video.py`
+Track people from your video with:
+```
+python run_video.py --input path/to/video.mp4 --save True
+```
 
-### Run inference
-``python run_video.py`` \
-``--input path/to/your/video.mp4 ``
+### `generate_clips.py`
+Generate `.npy` files from tracking clips with:
+```
+python generate_clips.py --input path/to/repo/with/videos
+```
 
+## New pipeline
+### YOLOv5 (Ultralytics)
 
-### References
-- YOLO paper: https://arxiv.org/abs/1506.02640
-- YOLOv5 (Ultralytics): https://github.com/ultralytics/yolov5
-- Deep SORT paper: https://arxiv.org/abs/1703.07402
-- Deep SORT repo: https://github.com/nwojke/deep_sort
+```python
+from yolo.yolov5utils import Detector
+
+yolo_model = Detector()  # init
+bboxes = yolo_model.forward(frame)  # inference
+```
+
+### DeepSORT
+
+```python
+from deep_sort.tracker import Tracker
+
+tracker = Tracker()  # init
+for frame in video:
+    bboxes = yolo_model.forward(frame)  # inference yolo
+    tracker.predict(frame, boxes)
+    frame = tracker.display(frame)  # draw bboxes
+```
